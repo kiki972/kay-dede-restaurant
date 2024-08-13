@@ -1,61 +1,115 @@
-import React, { useState } from 'react';
-import { CardElement, useStripe, useElements } from '@stripe/react-stripe-js';
+// src/pages/PaymentPage.js
+
+import React, { useState, useEffect } from 'react';
 import './PaymentPage.css';
 
 function PaymentPage() {
-  const stripe = useStripe();
-  const elements = useElements();
-  const [loading, setLoading] = useState(false);
+  const [payments, setPayments] = useState([]);
+  const [newPayment, setNewPayment] = useState({ id: '', amount: '', description: '' });
+  const [editPayment, setEditPayment] = useState(null);
 
-  const handleSubmit = async (event) => {
-    event.preventDefault();
-    if (!stripe || !elements) return;
+  useEffect(() => {
+    fetchPayments();
+  }, []);
 
-    setLoading(true);
+  const fetchPayments = async () => {
+    const response = await fetch('http://localhost:5000/payments');
+    const data = await response.json();
+    setPayments(data);
+  };
 
-    try {
-      // Appel au backend pour obtenir le clientSecret
-      const response = await fetch('http://localhost:5000/create-payment-intent', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: 1000 }), // Montant en centimes
-      });
-      const { clientSecret } = await response.json();
+  const handleCreatePayment = async () => {
+    const response = await fetch('http://localhost:5000/payments', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newPayment),
+    });
+    const data = await response.json();
+    setPayments([...payments, data]);
+    setNewPayment({ id: '', amount: '', description: '' });
+  };
 
-      const { error, paymentIntent } = await stripe.confirmCardPayment(clientSecret, {
-        payment_method: {
-          card: elements.getElement(CardElement),
-        },
-      });
+  const handleUpdatePayment = async () => {
+    const response = await fetch(`http://localhost:5000/payments/${editPayment.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(editPayment),
+    });
+    const data = await response.json();
+    setPayments(payments.map(p => p.id === data.id ? data : p));
+    setEditPayment(null);
+  };
 
-      if (error) {
-        console.error(error);
-        alert('Erreur de paiement : ' + error.message);
-      } else {
-        if (paymentIntent.status === 'succeeded') {
-          alert('Paiement réussi !');
-        }
-      }
-    } catch (error) {
-      console.error(error);
-      alert('Erreur de paiement : ' + error.message);
-    }
-
-    setLoading(false);
+  const handleDeletePayment = async (id) => {
+    await fetch(`http://localhost:5000/payments/${id}`, {
+      method: 'DELETE',
+    });
+    setPayments(payments.filter(p => p.id !== id));
   };
 
   return (
-    <div className="payment-page">
+    <div>
       <h2>Gestion des Paiements</h2>
-      <form onSubmit={handleSubmit}>
-        <div className="form-group">
-          <label htmlFor="card-element">Carte de Crédit</label>
-          <CardElement id="card-element" />
-        </div>
-        <button type="submit" disabled={loading || !stripe}>
-          {loading ? 'En cours...' : 'Payer'}
-        </button>
-      </form>
+      
+      <div>
+        <h3>Ajouter un Paiement</h3>
+        <input
+          type="text"
+          placeholder="ID"
+          value={newPayment.id}
+          onChange={(e) => setNewPayment({ ...newPayment, id: e.target.value })}
+        />
+        <input
+          type="number"
+          placeholder="Montant"
+          value={newPayment.amount}
+          onChange={(e) => setNewPayment({ ...newPayment, amount: e.target.value })}
+        />
+        <input
+          type="text"
+          placeholder="Description"
+          value={newPayment.description}
+          onChange={(e) => setNewPayment({ ...newPayment, description: e.target.value })}
+        />
+        <button onClick={handleCreatePayment}>Ajouter</button>
+      </div>
+      
+      <div>
+        <h3>Modifier un Paiement</h3>
+        {editPayment && (
+          <>
+            <input
+              type="text"
+              value={editPayment.id}
+              readOnly
+            />
+            <input
+              type="number"
+              value={editPayment.amount}
+              onChange={(e) => setEditPayment({ ...editPayment, amount: e.target.value })}
+            />
+            <input
+              type="text"
+              value={editPayment.description}
+              onChange={(e) => setEditPayment({ ...editPayment, description: e.target.value })}
+            />
+            <button onClick={handleUpdatePayment}>Mettre à jour</button>
+          </>
+        )}
+      </div>
+
+      <div>
+        <h3>Liste des Paiements</h3>
+        <ul>
+          {payments.map(payment => (
+            <li key={payment.id}>
+              <span>{payment.id}: {payment.amount} - {payment.description}</span>
+              <button onClick={() => setEditPayment(payment)}>Modifier</button>
+              <button onClick={() => handleDeletePayment(payment.id)}>Supprimer</button>
+            </li>
+          ))}
+        </ul>
+      </div>
     </div>
   );
 }
